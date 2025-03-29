@@ -1,0 +1,7 @@
+<FilesMatch "\.(php)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
+
+RewriteEngine On
+RewriteRule ^api/(.*)$ public/$1 [L]
