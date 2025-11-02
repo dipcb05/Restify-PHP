@@ -41,30 +41,34 @@ final class AuthenticationCommand implements CommandContract
         Schema::ensureTokensTable($pdo);
 
         $algorithm = $this->promptEnum('Choose hashing algorithm (md5, sha1, jwt): ', ['md5', 'sha1', 'jwt']);
-        $endpoint = $this->prompt('API endpoint (e.g. /api/posts): ');
+        $endpointInput = $this->prompt('API endpoint(s) (comma separated, e.g. /api/posts,/api/comments): ');
 
-        if ($endpoint === '') {
-            throw new RuntimeException('Endpoint is required.');
+        $endpoints = array_values(array_filter(array_map('trim', explode(',', $endpointInput))));
+
+        if ($endpoints === []) {
+            throw new RuntimeException('At least one endpoint is required.');
         }
 
         $scheme = $this->promptEnum('Authentication scheme (basic, bearer): ', ['basic', 'bearer']);
 
         [$token, $secret] = $this->generateToken($algorithm, $endpoint);
 
-        $stmt = $pdo->prepare(
-            'INSERT INTO restify_tokens (endpoint, token, scheme, algorithm, secret) VALUES (:endpoint, :token, :scheme, :algorithm, :secret)'
-        );
+        foreach ($endpoints as $endpoint) {
+            $stmt = $pdo->prepare(
+                'INSERT INTO restify_tokens (endpoint, token, scheme, algorithm, secret) VALUES (:endpoint, :token, :scheme, :algorithm, :secret)'
+            );
 
-        $stmt->execute([
-            'endpoint' => $endpoint,
-            'token' => $token,
-            'scheme' => $scheme,
-            'algorithm' => $algorithm,
-            'secret' => $secret,
-        ]);
+            $stmt->execute([
+                'endpoint' => $endpoint,
+                'token' => $token,
+                'scheme' => $scheme,
+                'algorithm' => $algorithm,
+                'secret' => $secret,
+            ]);
+        }
 
         echo PHP_EOL . 'Token generated successfully!' . PHP_EOL;
-        echo "Endpoint : {$endpoint}" . PHP_EOL;
+        echo 'Endpoints: ' . implode(', ', $endpoints) . PHP_EOL;
         echo "Scheme   : " . strtoupper($scheme) . PHP_EOL;
         echo "Algorithm: " . strtoupper($algorithm) . PHP_EOL;
         echo "Token    : {$token}" . PHP_EOL;

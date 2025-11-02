@@ -8,7 +8,7 @@ Key features:
 - Pure PHP 8+ with strict typing and modern paradigms.
 - Drop-in packages under `restify/packages`, autoloaded automatically.
 - Unified database helper (`Restify\Support\DB`) for MySQL, PostgreSQL, SQL Server, Oracle, SQLite, and MongoDB.
-- Built-in request logging and token authentication via CLI-driven setup.
+- APCu-backed caching, rate limiting, and token authentication via CLI-driven setup.
 - File-based endpoints in `api/` plus attribute-driven routes inside `class/`.
 - Optional Fiber-powered async runtime and background jobs.
 - One-command OpenAPI generation with live Swagger UI preview.
@@ -31,6 +31,15 @@ php restify/tests/run.php
 php restify-cli log
 php restify-cli authentication
 php restify-cli docs:openapi --serve --port 8081
+```
+
+Composer Install
+----------------
+
+```bash
+composer require restify-php/restify-php
+php vendor/bin/restify install
+php restify-cli run --async
 ```
 
 Documentation

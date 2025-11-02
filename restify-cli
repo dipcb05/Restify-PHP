@@ -7,14 +7,27 @@ use Restify\CLI\Console;
 use Restify\Support\ClassLoader;
 use Restify\Support\Env;
 
-$rootPath = __DIR__;
-$frameworkPath = $rootPath . '/restify';
+$packagePath = __DIR__;
+$workingDir = getcwd() ?: $packagePath;
+
+$frameworkPath = null;
+foreach ([$workingDir . '/restify', $packagePath . '/restify'] as $candidate) {
+    if (is_dir($candidate)) {
+        $frameworkPath = $candidate;
+        break;
+    }
+}
+
+if ($frameworkPath === null) {
+    fwrite(STDERR, 'Unable to locate the restify framework directory.' . PHP_EOL);
+    exit(1);
+}
 
 require $frameworkPath . '/src/Support/ClassLoader.php';
 
-ClassLoader::register($rootPath, $frameworkPath);
-Env::load($rootPath);
+ClassLoader::register($workingDir, $frameworkPath);
+Env::load($workingDir);
 
-$console = new Console($rootPath);
+$console = new Console($workingDir, $frameworkPath, $packagePath);
 
 exit($console->run($argv));

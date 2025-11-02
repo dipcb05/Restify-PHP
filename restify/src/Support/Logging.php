@@ -22,8 +22,6 @@ final class Logging
             return;
         }
 
-        Schema::ensureLogsTable($pdo);
-
         $statement = $pdo->prepare(
             'INSERT INTO restify_logs (endpoint, request_method, user_data, status_code) VALUES (:endpoint, :method, :user, :status)'
         );

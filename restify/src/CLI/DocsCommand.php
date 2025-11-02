@@ -11,7 +11,7 @@ use RuntimeException;
 
 final class DocsCommand implements CommandContract
 {
-    public function __construct(private readonly string $rootPath)
+    public function __construct(private readonly string $rootPath, private readonly string $frameworkPath)
     {
     }
 
@@ -66,7 +66,9 @@ final class DocsCommand implements CommandContract
             }
         }
 
-        $frameworkPath = $this->rootPath . DIRECTORY_SEPARATOR . 'restify';
+        $frameworkPath = is_dir($this->rootPath . DIRECTORY_SEPARATOR . 'restify')
+            ? $this->rootPath . DIRECTORY_SEPARATOR . 'restify'
+            : $this->frameworkPath;
         $application = $this->bootstrapApplication($frameworkPath);
 
         $spec = $this->buildSpecification($application);
@@ -204,3 +206,4 @@ HTML;
         file_put_contents($swaggerDir . DIRECTORY_SEPARATOR . 'index.html', $html);
     }
 }
+

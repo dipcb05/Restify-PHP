@@ -8,6 +8,7 @@ use Restify\CLI\AsyncCommand;
 use Restify\CLI\AuthenticationCommand;
 use Restify\CLI\Commands\MakeClassCommand;
 use Restify\CLI\DocsCommand;
+use Restify\CLI\InstallCommand;
 use Restify\CLI\LogCommand;
 
 /**
@@ -20,13 +21,18 @@ final class Console
      */
     private array $commands = [];
 
-    public function __construct(private readonly string $rootPath)
+    public function __construct(
+        private readonly string $rootPath,
+        private readonly string $frameworkPath,
+        private readonly string $packagePath
+    )
     {
         $this->register(new AsyncCommand($this->rootPath));
         $this->register(new MakeClassCommand($this->rootPath));
+        $this->register(new InstallCommand($this->rootPath, $this->frameworkPath, $this->packagePath));
         $this->register(new LogCommand($this->rootPath));
         $this->register(new AuthenticationCommand($this->rootPath));
-        $this->register(new DocsCommand($this->rootPath));
+        $this->register(new DocsCommand($this->rootPath, $this->frameworkPath));
     }
 
     public function register(CommandContract $command): void

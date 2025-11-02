@@ -1,7 +1,10 @@
 Restify-PHP Documentation
+- `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW` (per-minute rate limiting configuration)
+- `AUTH_SECRET` (optional JWT signing key; auto-generated if omitted)
 =========================
 
 > **Restify-PHP** is a native PHP 8+ micro-framework focused on simplicity, performance, and zero dependencies. Drop it into any environment, point the server at `public/`, and build APIs without Composer, scaffolding, or heavy bootstrapping.
+
 
 ---
 
@@ -21,15 +24,16 @@ Table of Contents
 7. [Middleware](#middleware)
 8. [Async Runtime](#async-runtime)
 9. [Database Connectivity](#database-connectivity)
-10. [Logging & Observability](#logging--observability)
-11. [Authentication](#authentication)
-12. [Command-Line Interface](#command-line-interface)
-13. [Testing](#testing)
-14. [Example Application](#example-application)
-15. [Packages & Contributions](#packages--contributions)
-16. [Hosting & Deployment](#hosting--deployment)
-17. [Security Checklist](#security-checklist)
-18. [Appendix](#appendix)
+10. [Caching & Opcode Support](#caching--opcode-support)
+11. [Logging & Observability](#logging--observability)
+12. [Authentication](#authentication)
+13. [Command-Line Interface](#command-line-interface)
+14. [Testing](#testing)
+15. [Example Application](#example-application)
+16. [Packages & Contributions](#packages--contributions)
+17. [Hosting & Deployment](#hosting--deployment)
+18. [Security Checklist](#security-checklist)
+19. [Appendix](#appendix)
     - [Environment Variables](#environment-variables)
     - [Changelog](#changelog)
     - [Contributing](#contributing)
@@ -52,6 +56,7 @@ Features at a glance:
 - Automatic eager-loading of every class in `class/`.
 - File-based endpoints under `api/` with per-method helpers.
 - Unified JSON response envelope.
+- APCu/OPcache-aware cache helpers with built-in rate limiting.
 - Optional Fiber-based async engine for concurrent HTTP, sockets, and background tasks.
 - Turn-key OpenAPI generator with Swagger UI preview.
 - Drop-in package system (`restify/packages`) for sharing functionality without Composer.
@@ -80,11 +85,18 @@ Visit `http://localhost:8000` to see the default JSON welcome payload.
 ```bash
 php restify-cli --help
 php restify-cli run --host 0.0.0.0 --port 8080 --async
-php restify-cli make:class App\\Domain\\UserService
+php restify-cli make:class App\Domain\UserService
 php restify/tests/run.php
 php restify-cli docs:openapi --serve --port 8081
 ```
 
+### Install via Composer
+
+```bash
+composer require restify-php/restify-php
+php vendor/bin/restify install
+php restify-cli run --async
+```
 ---
 
 Project Structure
@@ -380,6 +392,30 @@ Connections are cached; call `DB::disconnect('pgsql')` or `DB::disconnect()` to 
 
 ---
 
+Caching & Opcode Support
+-----------------------
+
+`Restify\\Support\\Cache` wraps APCu and OPcache for high-speed caching and opcode priming. If either extension is missing, these helpers silently fall back to no-ops (your code keeps working).
+
+- `Cache::put($key, $value, $seconds)` / `Cache::get($key)` / `Cache::delete($key)` / `Cache::clear()`
+- `Cache::remember($key, fn () => expensive(), $ttl)` for memoised results.
+- `Cache::primeOpcode($directory)` precompiles PHP files; `Cache::flushOpcode()` resets OPcache.
+- Rate limiting uses `Cache::rateLimit($key, $limit, $window)` and is wired into the default middleware.
+
+Enable APCu (set `apc.enabled=1` and `apc.enable_cli=1` for CLI) plus Zend OPcache (`opcache.enable=1`, `opcache.enable_cli=1`) in `php.ini` for best performance.
+
+Configured via environment variables:
+
+```
+RATE_LIMIT_MAX=60
+RATE_LIMIT_WINDOW=60
+```
+
+Set `RATE_LIMIT_MAX=0` to disable throttling entirely.
+
+
+---
+
 Logging & Observability
 -----------------------
 
@@ -407,6 +443,8 @@ FROM restify_logs
 ORDER BY id DESC
 LIMIT 25;
 ```
+
+Rate limiting is enforced via `Restify\Middleware\RateLimitMiddleware` (see [Caching & Opcode Support](#caching--opcode-support)) and can be tuned via `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW`.
 
 ---
 
@@ -437,6 +475,7 @@ Use `php restify-cli` to interact with your project:
 
 | Command            | Description                                                    | Usage Example                                           |
 |--------------------|----------------------------------------------------------------|---------------------------------------------------------|
+| `install`          | Publish the Restify skeleton into your project.                | `php restify-cli install`                               |
 | `run`              | Serve the application with optional async runtime.             | `php restify-cli run --host 0.0.0.0 --port 9000 --async` |
 | `make:class`       | Generate a class stub inside `class/`.                         | `php restify-cli make:class App\\Services\\Billing`     |
 | `log`              | Initialise logging and authentication tables.                  | `php restify-cli log`                                   |
@@ -450,6 +489,8 @@ Helpful flags:
 - `php restify-cli help log`
 - `php restify-cli help authentication`
 - `php restify-cli docs:openapi --help`
+
+The `install` command copies the skeleton (`restify/`, `api/`, `class/`, etc.) into your project. Composer users get this automatically via the supplied post-install script, but you can re-run it any time: `php restify-cli install` (or `php vendor/bin/restify install`).
 
 ---
 
@@ -581,6 +622,8 @@ Appendix
 - `APP_NAME`, `APP_ENV`, `APP_DEBUG`, `APP_TIMEZONE`, `APP_URL`
 - `APP_VERSION` (optional, used in OpenAPI docs)
 - `RESTIFY_ASYNC` (automatically toggled when running the async server command)
+- `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW` (per-minute rate limiting configuration)
+- `AUTH_SECRET` (optional JWT signing key; auto-generated if omitted)
 - Database keys as described in [Database Connectivity](#database-connectivity)
 
 ### Changelog
@@ -597,3 +640,8 @@ Appendix
 ### License
 
 Restify-PHP is released under the MIT License. Use it freely in commercial and open-source projects alike.
+
+
+
+
+
