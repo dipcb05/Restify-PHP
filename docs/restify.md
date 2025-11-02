@@ -1,9 +1,7 @@
 Restify-PHP Documentation
-- `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW` (per-minute rate limiting configuration)
-- `AUTH_SECRET` (optional JWT signing key; auto-generated if omitted)
 =========================
 
-> **Restify-PHP** is a native PHP 8+ micro-framework focused on simplicity, performance, and zero dependencies. Drop it into any environment, point the server at `public/`, and build APIs without Composer, scaffolding, or heavy bootstrapping.
+**Restify-PHP** is a native PHP 8+ micro-framework focused on simplicity, performance, and zero dependencies. Drop it into any environment, point the server at `public/`, and build APIs without Composer, scaffolding, or heavy bootstrapping.
 
 
 ---
