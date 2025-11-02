@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Restify\CLI;
 
 use Restify\CLI\AsyncCommand;
+use Restify\CLI\AuthenticationCommand;
 use Restify\CLI\Commands\MakeClassCommand;
+use Restify\CLI\DocsCommand;
+use Restify\CLI\LogCommand;
 
 /**
  * Minimal CLI entrypoint for repetitive scaffolding tasks.
@@ -21,6 +24,9 @@ final class Console
     {
         $this->register(new AsyncCommand($this->rootPath));
         $this->register(new MakeClassCommand($this->rootPath));
+        $this->register(new LogCommand($this->rootPath));
+        $this->register(new AuthenticationCommand($this->rootPath));
+        $this->register(new DocsCommand($this->rootPath));
     }
 
     public function register(CommandContract $command): void

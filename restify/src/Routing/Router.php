@@ -65,6 +65,14 @@ final class Router
         return $this;
     }
 
+    /**
+     * @return Route[]
+     */
+    public function routes(): array
+    {
+        return $this->routes;
+    }
+
     public function dispatch(Request $request): Response
     {
         foreach ($this->routes as $route) {

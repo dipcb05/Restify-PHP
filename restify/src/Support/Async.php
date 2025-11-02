@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Restify\Support;
 
 use Restify\Core\Async as AsyncCore;
+use Restify\Http\Response;
 
 final class Async
 {
@@ -37,7 +38,7 @@ final class Async
         AsyncCore::instance()->background($script, $arguments);
     }
 
-    public static function json(array $data, int $status = 200, array $meta = [], ?string $message = null)
+    public static function json(array $data, int $status = 200, array $meta = [], ?string $message = null): Response
     {
         return AsyncCore::instance()->json($data, $status, $meta, $message);
     }
