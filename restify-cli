@@ -1,0 +1,20 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Restify\CLI\Console;
+use Restify\Support\ClassLoader;
+use Restify\Support\Env;
+
+$rootPath = __DIR__;
+$frameworkPath = $rootPath . '/restify';
+
+require $frameworkPath . '/src/Support/ClassLoader.php';
+
+ClassLoader::register($rootPath, $frameworkPath);
+Env::load($rootPath);
+
+$console = new Console($rootPath);
+
+exit($console->run($argv));
