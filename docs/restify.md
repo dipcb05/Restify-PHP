@@ -1,6 +1,4 @@
 Restify-PHP Documentation
-- `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW` (per-minute rate limiting configuration)
-- `AUTH_SECRET` (optional JWT signing key; auto-generated if omitted)
 =========================
 
 > **Restify-PHP** is a native PHP 8+ micro-framework focused on simplicity, performance, and zero dependencies. Drop it into any environment, point the server at `public/`, and build APIs without Composer, scaffolding, or heavy bootstrapping.
@@ -52,15 +50,17 @@ Restify-PHP embraces three core principles:
 
 Features at a glance:
 
-- Pure PHP 8+ with strict typing and modern language features.
-- Automatic eager-loading of every class in `class/`.
-- File-based endpoints under `api/` with per-method helpers.
-- Unified JSON response envelope.
-- APCu/OPcache-aware cache helpers with built-in rate limiting.
-- Optional Fiber-based async engine for concurrent HTTP, sockets, and background tasks.
-- Turn-key OpenAPI generator with Swagger UI preview.
-- Drop-in package system (`restify/packages`) for sharing functionality without Composer.
-- Batteries-included CLI (`php restify-cli`) for serving, scaffolding, documenting, and testing.
+- Pure PHP 8+ with strict typing, attributes, enums, and Fibers.
+- Automatic eager-loading of every class in `class/` for instant availability.
+- File-based endpoints in `api/` plus attribute-driven routes with metadata.
+- Unified JSON responses, validation errors, and structured exception output.
+- APCu/OPcache-aware cache helpers, rate limiting, and request throttling.
+- Optional Fiber-based async engine for HTTP concurrency, sockets, and background tasks.
+- Turn-key OpenAPI generator (JSON/YAML) with sample payloads and Swagger UI.
+- Configurable middleware stack: CORS, logging with redaction, JWT auth, error handler.
+- Schema registry and JSON Schema validation for query, headers, cookies, and bodies.
+- CLI for scaffolding, async runtime, OpenAPI generation, authentication, logging, and tests.
+- Drop-in package system (`restify/packages`) and Docker/docker-compose templates.
 
 ---
 
@@ -79,6 +79,7 @@ php -S localhost:8000 -t public
 ```
 
 Visit `http://localhost:8000` to see the default JSON welcome payload.
+`GET /health` returns a deployment-friendly heartbeat (`{"status":"ok"}`).
 
 ### CLI Shortcuts
 
@@ -87,7 +88,8 @@ php restify-cli --help
 php restify-cli run --host 0.0.0.0 --port 8080 --async
 php restify-cli make:class App\Domain\UserService
 php restify/tests/run.php
-php restify-cli docs:openapi --serve --port 8081
+php restify-cli docs:openapi --format yaml --serve --port 8081
+php restify-cli test --phpunit
 ```
 
 ### Install via Composer
@@ -265,6 +267,53 @@ Default JSON envelope:
 }
 ```
 
+### Route Metadata & Validation
+
+Both route files and attributes accept an optional metadata array that feeds the middleware pipeline, OpenAPI generator, and JSON Schema validator.
+
+```php
+// restify/routes/api.php
+$router->post('/api/users', static fn (Request $request) => create_user($request), [
+    'summary' => 'Create a user',
+    'tags' => ['Users'],
+    'request' => [
+        'schema' => 'CreateUser',      // references config/schemas.php
+        'source' => 'body',
+    ],
+    'responses' => [
+        '201' => [
+            'description' => 'User created',
+            'schema' => ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]],
+        ],
+        '422' => ['description' => 'Validation failed'],
+    ],
+]);
+```
+
+For attributes, pass metadata using named parameters:
+
+```php
+#[Route(
+    methods: 'POST',
+    path: '/api/posts',
+    summary: 'Publish a post',
+    request: ['schema' => 'PostPayload'],
+    responses: [
+        '201' => ['description' => 'Post stored'],
+        '422' => ['description' => 'Validation errors'],
+    ]
+)]
+public function store(Request $request): array
+{
+    // ...
+}
+```
+
+- Schemas are defined in `restify/config/schemas.php` using standard JSON Schema fragments.
+- `source` controls validation target: `body` (default), `query`, `headers`, or `cookies`.
+- Invalid requests short-circuit with a `422` JSON payload listing validation errors.
+- OpenAPI documents automatically reuse schemas and examples supplied here.
+
 ---
 
 Responses
@@ -286,28 +335,52 @@ return Restify\Http\Response::text('Plain content', status: 204);
 Middleware
 ----------
 
-Global middleware resides in `restify/config/middleware.php`:
+Global middleware is configured in `restify/config/middleware.php`. Restify ships with a production-ready stack that covers observability, safety, and developer experience:
+
+| Middleware                              | Purpose                                                                                 | Config source                 |
+|-----------------------------------------|-----------------------------------------------------------------------------------------|-------------------------------|
+| `Restify\Middleware\ExceptionMiddleware` | Converts uncaught exceptions into JSON envelopes, optional stack traces, logs incidents | `restify/config/exceptions.php` |
+| `Restify\Middleware\CorsMiddleware`      | Applies CORS headers, preflight caching, credential rules                               | `restify/config/cors.php`       |
+| `Restify\Middleware\RateLimitMiddleware` | APCu-backed rate limiting with per-IP buckets                                           | `.env` (`RATE_LIMIT_*`)         |
+| `Restify\Middleware\AuthenticationMiddleware` | Header-driven token/JWT enforcement, per-endpoint secrets                                | `restify/config/auth.php`       |
+| `Restify\Middleware\LoggingMiddleware`   | Structured request/response logging to file and database with redaction + duration      | `restify/config/logging.php`    |
+
+`restify/config/middleware.php` wires each middleware with constructor parameters:
 
 ```php
 <?php
 
-use Restify\Http\Request;
-use Restify\Http\Response;
+use Restify\Middleware\AuthenticationMiddleware;
+use Restify\Middleware\CorsMiddleware;
+use Restify\Middleware\ExceptionMiddleware;
+use Restify\Middleware\LoggingMiddleware;
+use Restify\Middleware\RateLimitMiddleware;
+use Restify\Support\Config;
+
+$exceptions = Config::get('exceptions', []);
+$cors = Config::get('cors', []);
+$auth = Config::get('auth', []);
+$logging = Config::get('logging', []);
 
 return [
     'global' => [
-        static function (Request $request, callable $next): Response {
-            $response = $next($request);
-            $response->headers['X-Powered-By'] = 'Restify-PHP';
-
-            return $response;
-        },
+        [ExceptionMiddleware::class, [$exceptions]],
+        [CorsMiddleware::class, [$cors]],
+        [RateLimitMiddleware::class, [
+            'limit' => (int) ($_ENV['RATE_LIMIT_MAX'] ?? 60),
+            'seconds' => (int) ($_ENV['RATE_LIMIT_WINDOW'] ?? 60),
+        ]],
+        [AuthenticationMiddleware::class, [$auth]],
+        [LoggingMiddleware::class, [$logging]],
     ],
 ];
 ```
 
-- Class middleware must implement `Restify\Middleware\MiddlewareInterface`.
-- Closures receive the `Request` and `$next` callable.
+- Middleware classes implement `Restify\Middleware\MiddlewareInterface`.
+- Array entries support constructor arguments via `[ClassName::class, [arg1, arg2]]`.
+- Order matters: exceptions wrap everything, logging executes last to capture responses.
+
+Add custom middleware by pushing to the `global` array or by building route-specific pipelines before dispatching.
 
 ---
 
@@ -419,32 +492,51 @@ Set `RATE_LIMIT_MAX=0` to disable throttling entirely.
 Logging & Observability
 -----------------------
 
-Restify ships with a lightweight request logger that records inbound traffic once the backing table exists.
+Restify combines structured logging, database auditing, rate limiting, and OpenAPI metadata to deliver full-stack observability.
 
-### Enabling logging
+### Request/response logging
 
-1. Ensure your database connection is configured in `.env`.
-2. Run `php restify-cli log` to create the required `restify_logs` (and companion `restify_tokens`) tables.
-3. `Restify\Middleware\LoggingMiddleware` automatically records every request after the response is generated.
+`Restify\Middleware\LoggingMiddleware` captures every request:
 
-### Logged fields
+- Writes JSON lines to `storage/logs/restify.log` (path configurable via `LOG_PATH`).
+- Persists enriched payloads in `restify_logs` when a PDO connection exists.
+- Redacts sensitive keys (defaults: `password`, `token`, `secret`, `authorization`).
+- Records request/response headers (opt-in), bodies (size-limited), duration, IP, user agent.
+- Downgrades to quiet mode if logging is disabled.
 
-- `endpoint` – request path (e.g. `/api/posts/1`)
-- `request_method` – HTTP method (`GET`, `POST`, etc.)
-- `user_data` – JSON containing IP address, user agent, and related metadata
-- `status_code` – HTTP status returned to the client
-- `created_at` – timestamp of the log entry
+Configure behaviour in `restify/config/logging.php` or via `.env`:
 
-Example query:
-
-```sql
-SELECT endpoint, request_method, status_code, created_at
-FROM restify_logs
-ORDER BY id DESC
-LIMIT 25;
+```
+LOGGING_ENABLED=true
+LOG_LEVEL=info
+LOG_REQUEST_BODY=true
+LOG_RESPONSE_BODY=false
+LOG_BODY_LIMIT=2048
+LOG_DATABASE_ENABLED=true
 ```
 
-Rate limiting is enforced via `Restify\Middleware\RateLimitMiddleware` (see [Caching & Opcode Support](#caching--opcode-support)) and can be tuned via `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW`.
+Create the supporting tables once:
+
+```bash
+php restify-cli log
+```
+
+### Rate limiting
+
+`Restify\Middleware\RateLimitMiddleware` throttles requests per IP using APCu:
+
+```
+RATE_LIMIT_MAX=120
+RATE_LIMIT_WINDOW=60
+```
+
+When APCu is missing, the middleware gracefully allows all traffic (log a warning in development).
+
+### CORS & diagnostics
+
+`restify/config/cors.php` drives `CorsMiddleware` (origins, headers, credentials). Preflights are short-circuited with a 204 response and proper caching headers.
+
+`GET /health` offers a JSON uptime snapshot for load balancers and monitors.
 
 ---
 
@@ -465,6 +557,8 @@ The bundled authentication workflow issues tokens tied to specific endpoints and
 - Include the token in the `Authorization` header (`Basic <token>` or `Bearer <token>`).
 - `Restify\Middleware\AuthenticationMiddleware` validates incoming requests against stored tokens. Endpoints without tokens remain public.
 - JWT tokens are signed with HS256 using the stored secret, ensuring tamper protection.
+- Allow-list public routes via `AUTH_PUBLIC_PATHS=/health,/docs` and customise the inspected header with `AUTH_HEADER=X-Api-Key`.
+- Disable enforcement altogether with `AUTH_ENABLED=false` (useful for local development).
 
 ---
 
@@ -473,14 +567,15 @@ Command-Line Interface
 
 Use `php restify-cli` to interact with your project:
 
-| Command            | Description                                                    | Usage Example                                           |
-|--------------------|----------------------------------------------------------------|---------------------------------------------------------|
-| `install`          | Publish the Restify skeleton into your project.                | `php restify-cli install`                               |
-| `run`              | Serve the application with optional async runtime.             | `php restify-cli run --host 0.0.0.0 --port 9000 --async` |
-| `make:class`       | Generate a class stub inside `class/`.                         | `php restify-cli make:class App\\Services\\Billing`     |
-| `log`              | Initialise logging and authentication tables.                  | `php restify-cli log`                                   |
-| `authentication`   | Issue authentication tokens tied to specific endpoints.        | `php restify-cli authentication`                        |
-| `docs:openapi`     | Generate OpenAPI docs and optional Swagger UI live preview.    | `php restify-cli docs:openapi --serve --port 8081`      |
+| Command            | Description                                                    | Usage Example                                              |
+|--------------------|----------------------------------------------------------------|------------------------------------------------------------|
+| `install`          | Publish the Restify skeleton into your project.                | `php restify-cli install`                                  |
+| `run`              | Serve the application with optional async runtime.             | `php restify-cli run --host 0.0.0.0 --port 9000 --async`    |
+| `make:class`       | Generate a class stub inside `class/`.                         | `php restify-cli make:class App\\Services\\Billing`        |
+| `log`              | Initialise logging and authentication tables.                  | `php restify-cli log`                                      |
+| `authentication`   | Issue authentication tokens tied to specific endpoints.        | `php restify-cli authentication`                           |
+| `docs:openapi`     | Generate OpenAPI docs (JSON/YAML) and optional Swagger UI.     | `php restify-cli docs:openapi --format yaml --serve`       |
+| `test`             | Run the PHPUnit suite or built-in runner with passthrough flags.| `php restify-cli test --phpunit --filter=ExampleTest`     |
 
 Helpful flags:
 
@@ -489,6 +584,7 @@ Helpful flags:
 - `php restify-cli help log`
 - `php restify-cli help authentication`
 - `php restify-cli docs:openapi --help`
+- `php restify-cli help test`
 
 The `install` command copies the skeleton (`restify/`, `api/`, `class/`, etc.) into your project. Composer users get this automatically via the supplied post-install script, but you can re-run it any time: `php restify-cli install` (or `php vendor/bin/restify install`).
 
@@ -497,13 +593,20 @@ The `install` command copies the skeleton (`restify/`, `api/`, `class/`, etc.) i
 Testing
 -------
 
-The bundled runner lives at `restify/tests/run.php`. Every test extends `Restify\Testing\TestCase`, which boots the full application.
+Restify provides two ways to execute tests:
+
+- `php restify-cli test` auto-detects `vendor/bin/phpunit` and falls back to the native runner.
+- `php restify/tests/run.php` always uses the built-in harness.
+
+Composer convenience:
 
 ```bash
-php restify/tests/run.php
+composer test                # delegates to restify-cli test
+php restify-cli test --phpunit --filter=ExampleTest
+php restify/tests/run.php    # explicitly invoke the native runner
 ```
 
-Assertions include `Assert::equals`, `Assert::status`, `Assert::json`, and more.
+`Restify\Testing\TestCase` boots the full framework, giving you helpers such as `call()`, `json()`, and composed assertions (`Assert::equals`, `Assert::status`, `Assert::json`, etc.). Place additional tests in `tests/` (project root); the runner pulls from both `restify/tests` and your application's `tests` directory.
 
 ---
 
@@ -553,6 +656,19 @@ Hosting & Deployment
 ```bash
 php restify-cli run --host 127.0.0.1 --port 8000 --docroot public
 ```
+
+### Docker & docker-compose
+
+Spin up the bundled container images:
+
+```bash
+docker compose up --build
+# App -> http://localhost:8000, Redis cache -> 6379
+```
+
+- `Dockerfile` ships with PHP 8.2 CLI + PDO extensions + opcache.
+- `docker-compose.yml` mounts the repository for live reload and provisions a Redis instance (optional caching backend).
+- Environment overrides: `RESTIFY_PORT`, `APP_ENV`, `APP_DEBUG`, `APP_URL`.
 
 ### Apache
 
@@ -619,12 +735,21 @@ Appendix
 
 ### Environment Variables
 
-- `APP_NAME`, `APP_ENV`, `APP_DEBUG`, `APP_TIMEZONE`, `APP_URL`
-- `APP_VERSION` (optional, used in OpenAPI docs)
-- `RESTIFY_ASYNC` (automatically toggled when running the async server command)
-- `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW` (per-minute rate limiting configuration)
-- `AUTH_SECRET` (optional JWT signing key; auto-generated if omitted)
-- Database keys as described in [Database Connectivity](#database-connectivity)
+- Core: `APP_NAME`, `APP_ENV`, `APP_DEBUG`, `APP_TIMEZONE`, `APP_URL`, `APP_VERSION`.
+- Async toggle: `RESTIFY_ASYNC` (set automatically by the async CLI runner).
+- Rate limiting: `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW`.
+- Authentication: `AUTH_ENABLED`, `AUTH_PUBLIC_PATHS`, `AUTH_HEADER`, `AUTH_SECRET`.
+- Logging: `LOGGING_ENABLED`, `LOG_LEVEL`, `LOG_PATH`, `LOG_BODY_LIMIT`, `LOG_REQUEST_BODY`, `LOG_RESPONSE_BODY`, `LOG_DATABASE_ENABLED`, `LOG_SENSITIVE_FIELDS`.
+- CORS: `CORS_ENABLED`, `CORS_ALLOWED_ORIGINS`, `CORS_ALLOWED_METHODS`, `CORS_ALLOWED_HEADERS`, `CORS_EXPOSED_HEADERS`, `CORS_ALLOW_CREDENTIALS`, `CORS_MAX_AGE`.
+- Exceptions: `EXCEPTIONS_ENABLED`, `EXCEPTIONS_REPORT`, `EXCEPTIONS_TRACE`, `EXCEPTIONS_LOG_LEVEL`.
+- Docker overrides: `RESTIFY_PORT` for compose binding.
+- Database credentials as detailed in [Database Connectivity](#database-connectivity).
+
+### Schema Registry
+
+- Define reusable JSON Schemas in `restify/config/schemas.php`.
+- Reference schemas by name (`'CreateUser'`) within route metadata or attributes.
+- Schemas populate validation, OpenAPI components, and example payloads automatically.
 
 ### Changelog
 

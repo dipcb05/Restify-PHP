@@ -14,7 +14,10 @@ final class Logging
     {
     }
 
-    public static function record(Request $request, Response $response): void
+    /**
+     * @param array<string, mixed> $context
+     */
+    public static function record(Request $request, Response $response, string $level = 'info', array $context = []): void
     {
         $pdo = DB::connection();
 
@@ -26,12 +29,25 @@ final class Logging
             'INSERT INTO restify_logs (endpoint, request_method, user_data, status_code) VALUES (:endpoint, :method, :user, :status)'
         );
 
-        $statement->execute([
-            'endpoint' => $request->uri,
-            'method' => $request->method,
-            'user' => json_encode(self::userData($request), JSON_THROW_ON_ERROR),
-            'status' => $response->status,
-        ]);
+        $payload = [
+            'level' => strtolower($level),
+            'request' => $context['request'] ?? null,
+            'response' => $context['response'] ?? null,
+            'client' => self::userData($request),
+            'duration_ms' => $context['duration_ms'] ?? null,
+            'exception' => $context['exception'] ?? null,
+        ];
+
+        try {
+            $statement->execute([
+                'endpoint' => $request->uri,
+                'method' => $request->method,
+                'user' => json_encode($payload, JSON_THROW_ON_ERROR),
+                'status' => $response->status,
+            ]);
+        } catch (\Throwable) {
+            // silently ignore database logging failures
+        }
     }
 
     private static function userData(Request $request): array

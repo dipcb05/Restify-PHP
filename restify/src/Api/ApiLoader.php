@@ -47,6 +47,7 @@ final class ApiLoader
             $handlers = $endpoint->handlers();
             $fallback = $endpoint->fallbackHandler();
             $path = $endpoint->pathValue();
+            $metadata = $endpoint->metadataValue();
 
             if ($methods === []) {
                 $methods = ['GET'];
@@ -73,7 +74,7 @@ final class ApiLoader
                 $result = CallbackInvoker::invoke($handler, $request, $parameters);
 
                 return $this->normalizeResult($result);
-            });
+            }, $metadata);
         }
     }
 
@@ -131,6 +132,47 @@ final class ApiLoader
     {
         foreach ($definition as $method => $handler) {
             $upper = strtoupper((string) $method);
+
+            if (in_array($upper, ['META', 'METADATA', 'OPENAPI'], true)) {
+                if (is_array($handler)) {
+                    $endpoint->metadata($handler);
+                }
+
+                continue;
+            }
+
+            if ($upper === 'SUMMARY') {
+                $endpoint->metadata(['summary' => (string) $handler]);
+                continue;
+            }
+
+            if ($upper === 'DESCRIPTION') {
+                $endpoint->metadata(['description' => (string) $handler]);
+                continue;
+            }
+
+            if ($upper === 'TAGS') {
+                $endpoint->metadata(['tags' => (array) $handler]);
+                continue;
+            }
+
+            if ($upper === 'REQUEST') {
+                $endpoint->metadata(['request' => $handler]);
+                continue;
+            }
+
+            if ($upper === 'RESPONSES') {
+                if (is_array($handler)) {
+                    $endpoint->metadata(['responses' => $handler]);
+                }
+
+                continue;
+            }
+
+            if ($upper === 'METHODS' && is_array($handler)) {
+                $endpoint->metadata(['methods' => $handler]);
+                continue;
+            }
 
             if ($upper === 'PATH') {
                 $endpoint->path((string) $handler);

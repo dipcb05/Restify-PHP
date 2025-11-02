@@ -18,6 +18,10 @@ final class RateLimitMiddleware implements MiddlewareInterface
 
     public function process(Request $request, callable $next): Response
     {
+        if (strtoupper($request->method) === 'OPTIONS') {
+            return $next($request);
+        }
+
         $key = $this->buildKey($request);
 
         if (!Cache::rateLimit($key, $this->limit, $this->seconds)) {

@@ -6,11 +6,11 @@ use Restify\Core\Application;
 use Restify\Support\ClassLoader;
 use Restify\Support\Env;
 
-define('RESTIFY_START', microtime(true));
-define('RESTIFY_BASE_PATH', dirname(__DIR__));
-define('RESTIFY_ROOT_PATH', dirname(__DIR__, 2));
+defined('RESTIFY_START') || define('RESTIFY_START', microtime(true));
+defined('RESTIFY_BASE_PATH') || define('RESTIFY_BASE_PATH', dirname(__DIR__));
+defined('RESTIFY_ROOT_PATH') || define('RESTIFY_ROOT_PATH', dirname(__DIR__, 2));
 
-require RESTIFY_BASE_PATH . '/src/Support/ClassLoader.php';
+require_once RESTIFY_BASE_PATH . '/src/Support/ClassLoader.php';
 
 ClassLoader::register(RESTIFY_ROOT_PATH, RESTIFY_BASE_PATH);
 

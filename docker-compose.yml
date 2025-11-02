@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    container_name: restify-app
+    ports:
+      - "${RESTIFY_PORT:-8000}:8000"
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_DEBUG: ${APP_DEBUG:-true}
+      APP_URL: ${APP_URL:-http://localhost:8000}
+    volumes:
+      - ./:/var/www/restify
+    command: php -S 0.0.0.0:8000 -t public
+    depends_on:
+      - redis
+  redis:
+    image: redis:7-alpine
+    container_name: restify-redis
+    ports:
+      - "6379:6379"

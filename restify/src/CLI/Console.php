@@ -10,6 +10,7 @@ use Restify\CLI\Commands\MakeClassCommand;
 use Restify\CLI\DocsCommand;
 use Restify\CLI\InstallCommand;
 use Restify\CLI\LogCommand;
+use Restify\CLI\TestCommand;
 
 /**
  * Minimal CLI entrypoint for repetitive scaffolding tasks.
@@ -33,6 +34,7 @@ final class Console
         $this->register(new LogCommand($this->rootPath));
         $this->register(new AuthenticationCommand($this->rootPath));
         $this->register(new DocsCommand($this->rootPath, $this->frameworkPath));
+        $this->register(new TestCommand($this->rootPath, $this->frameworkPath));
     }
 
     public function register(CommandContract $command): void

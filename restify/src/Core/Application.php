@@ -152,13 +152,15 @@ final class Application
                 foreach ($attributes as $attribute) {
                     /** @var RouteAttribute $route */
                     $route = $attribute->newInstance();
+                    $metadata = $route->metadata();
 
                     $this->router->add(
                         $route->methods,
                         $route->path,
                         function (Request $request, array $parameters) use ($instance, $method) {
                             return $this->invokeAttributedMethod($instance, $method, $request, $parameters);
-                        }
+                        },
+                        $metadata
                     );
                 }
             }

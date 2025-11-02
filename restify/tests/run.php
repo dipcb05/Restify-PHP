@@ -2,25 +2,48 @@
 
 declare(strict_types=1);
 
-use Restify\Support\ClassLoader;
-use Restify\Support\Env;
 use Restify\Testing\TestRunner;
 
-$frameworkPath = dirname(__DIR__);
-$rootPath = dirname(__DIR__, 2);
+$paths = require __DIR__ . '/bootstrap.php';
 
-require $frameworkPath . '/src/Support/ClassLoader.php';
+$frameworkPath = $paths['frameworkPath'] ?? dirname(__DIR__);
+$rootPath = $paths['rootPath'] ?? dirname(__DIR__, 2);
 
-ClassLoader::register($rootPath, $frameworkPath);
-Env::load($rootPath);
+$directories = [
+    __DIR__,
+];
+
+$projectTests = $rootPath . '/tests';
+
+if (is_dir($projectTests) && realpath($projectTests) !== realpath(__DIR__)) {
+    $directories[] = $projectTests;
+}
 
 $tests = [];
+$loaded = [];
 
-foreach (glob(__DIR__ . '/*Test.php') as $file) {
-    require_once $file;
+foreach ($directories as $directory) {
+    $iterator = new \RecursiveIteratorIterator(
+        new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS)
+    );
 
-    $class = basename($file, '.php');
-    $tests[] = 'Tests\\' . $class;
+    foreach ($iterator as $file) {
+        if (!$file->isFile() || !str_ends_with($file->getFilename(), 'Test.php')) {
+            continue;
+        }
+
+        $path = $file->getPathname();
+
+        if (isset($loaded[$path])) {
+            continue;
+        }
+
+        require_once $path;
+        $loaded[$path] = true;
+
+        $class = basename($path, '.php');
+        $tests[] = 'Tests\\' . $class;
+    }
 }
 
 $runner = new TestRunner($tests);

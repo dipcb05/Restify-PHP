@@ -39,7 +39,10 @@
     ],
     "post-update-cmd": [
       "@php vendor/bin/restify install"
-    ]
+    ],
+    "serve": "php -S localhost:8000 -t public",
+    "docs": "php restify-cli docs:openapi",
+    "test": "php restify-cli test"
   },
   "extra": {
     "branch-alias": {

@@ -1,0 +1,88 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment name
+        required: true
+        default: production
+      ref:
+        description: Git ref to deploy (defaults to current HEAD)
+        required: false
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment != '' && inputs.environment || 'production' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, curl, pdo_mysql, pdo_sqlite, sqlite, opcache
+          coverage: none
+
+      - name: Install dependencies (no-dev)
+        run: composer install --prefer-dist --no-dev --no-progress --no-interaction
+
+      - name: Build OpenAPI spec
+        run: php restify-cli docs:openapi --format json
+
+      - name: Create release archive
+        run: |
+          tar czf release.tar.gz \
+            --exclude='.github' \
+            --exclude='.git' \
+            --exclude='storage/logs/*' \
+            --exclude='storage/cache/*' \
+            .
+
+      - name: Prepare remote directory
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            mkdir -p "${{ secrets.DEPLOY_PATH }}/releases/${{ github.run_id }}"
+
+      - name: Upload release archive to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          source: release.tar.gz
+          target: ${{ secrets.DEPLOY_PATH }}/releases/${{ github.run_id }}/
+
+      - name: Run remote deployment tasks
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            set -e
+            RELEASE_DIR="${{ secrets.DEPLOY_PATH }}/releases/${{ github.run_id }}"
+            mkdir -p "${RELEASE_DIR}"
+            tar xzf "${RELEASE_DIR}/release.tar.gz" -C "${RELEASE_DIR}"
+            rm -f "${RELEASE_DIR}/release.tar.gz"
+            ln -sfn "${RELEASE_DIR}" "${{ secrets.DEPLOY_PATH }}/current"
+            cd "${{ secrets.DEPLOY_PATH }}/current"
+            composer install --prefer-dist --no-dev --no-progress --no-interaction || true
+            php restify-cli install
+            php restify-cli docs:openapi --format json
+            mkdir -p storage/logs

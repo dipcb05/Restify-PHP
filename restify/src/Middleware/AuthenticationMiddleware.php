@@ -8,6 +8,7 @@ use PDO;
 use Restify\Http\Request;
 use Restify\Http\Response;
 use Restify\Support\DB;
+use Restify\Support\Config;
 
 final class AuthenticationMiddleware implements MiddlewareInterface
 {
@@ -15,9 +16,29 @@ final class AuthenticationMiddleware implements MiddlewareInterface
      * @var array<string, array<int, array<string, string>>>
      */
     private static array $cache = [];
+    /**
+     * @var array<string, mixed>
+     */
+    private array $config;
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    public function __construct(array $config = [])
+    {
+        $this->config = $config ?: Config::get('auth', []);
+    }
 
     public function process(Request $request, callable $next): Response
     {
+        if (!(bool) ($this->config['enabled'] ?? true)) {
+            return $next($request);
+        }
+
+        if ($this->isPublicPath($request->uri)) {
+            return $next($request);
+        }
+
         $pdo = DB::connection();
 
         if (!$pdo instanceof PDO) {
@@ -31,7 +52,7 @@ final class AuthenticationMiddleware implements MiddlewareInterface
             return $next($request);
         }
 
-        $authorization = $request->headers['Authorization'] ?? '';
+        $authorization = $this->headerValue($request, (string) ($this->config['header'] ?? 'Authorization'));
 
         if ($authorization === '') {
             return $this->unauthorizedResponse();
@@ -72,6 +93,10 @@ final class AuthenticationMiddleware implements MiddlewareInterface
     {
         $scheme = strtolower($token['scheme'] ?? '');
         $algorithm = strtolower($token['algorithm'] ?? '');
+
+        if ($scheme !== '' && !$this->schemeAllowed($scheme)) {
+            return false;
+        }
 
         $expectedPrefix = match ($scheme) {
             'basic' => 'basic ',
@@ -136,5 +161,56 @@ final class AuthenticationMiddleware implements MiddlewareInterface
             status: 401,
             message: 'Unauthorized.'
         );
+    }
+
+    private function isPublicPath(string $path): bool
+    {
+        /** @var array<int, string> $public */
+        $public = $this->config['public_paths'] ?? [];
+
+        if ($public === []) {
+            return false;
+        }
+
+        foreach ($public as $pattern) {
+            if ($pattern === '/*') {
+                return true;
+            }
+
+            if ($pattern === $path) {
+                return true;
+            }
+
+            if (str_ends_with($pattern, '*')) {
+                $prefix = rtrim($pattern, '*');
+                if ($prefix === '' || str_starts_with($path, rtrim($prefix, '/'))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function headerValue(Request $request, string $header): string
+    {
+        foreach ($request->headers as $name => $value) {
+            if (strcasecmp($name, $header) === 0) {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    private function schemeAllowed(string $scheme): bool
+    {
+        $allowed = $this->config['schemes'] ?? null;
+
+        if (!is_array($allowed) || $allowed === []) {
+            return true;
+        }
+
+        return in_array(strtolower($scheme), array_map('strtolower', $allowed), true);
     }
 }
