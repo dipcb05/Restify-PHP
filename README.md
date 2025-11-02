@@ -1,9 +1,19 @@
 Restify-PHP
 ===========
 
+Simplicity | Performance | Portability
+
 Ultra-light, zero-dependency PHP 8+ micro-framework for building blazing fast JSON APIs. Drop your domain objects into `class/`, start the built-in server, and you are shipping without Composer or vendor installs.
 
-Key features:
+Why Restify?
+===========
+
+Because most frameworks today assume you want the world — ORM, DI containers, 50MB of dependencies.
+Restify assumes you want control — a clean, direct way to build APIs that just work.
+Whether you’re serving AI microservices, IoT endpoints, or simple REST backends, Restify lets you focus on logic, not setup.
+
+Key features
+=============
 
 - Pure PHP 8+ with strict typing and modern paradigms.
 - Drop-in packages under `restify/packages`, autoloaded automatically.
@@ -14,7 +24,7 @@ Key features:
 - One-command OpenAPI generation with live Swagger UI preview.
 - Batteries-included CLI (`php restify-cli`) for serving, scaffolding, documenting, and testing.
 
-Get Started
+QuickStart
 -----------
 
 ```bash
