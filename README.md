@@ -1,5 +1,9 @@
-Restify-PHP
-===========
+<p align="center">
+  <img src="public/logo.png" alt="Restify-PHP Logo" width="200">
+</p>
+
+# Restify-PHP
+
 
 Simplicity | Performance | Portability
 
